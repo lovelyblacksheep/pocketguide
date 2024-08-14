@@ -7,8 +7,7 @@ router.post('/api', (req, res) => {
     const postedData = req.body;
 
     const getDate = (date) => {
-        var sub_date = date.split('-');
-        return `${sub_date[2]}-${sub_date[1]}-${sub_date[0]}`;
+        return date.split('T')[0]; // Extract the YYYY-MM-DD part from the ISO 8601 date string
     }
 
     console.log('posted data is', postedData);
