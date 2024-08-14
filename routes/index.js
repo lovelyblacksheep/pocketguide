@@ -3,11 +3,15 @@ import fetch from 'node-fetch';
 
 const router = express.Router();
 
-router.post('/api', async (req, res) => {
+router.post('/api', (req, res) => {
     const postedData = req.body;
 
-    console.log('posted data is', postedData);
+    const getDate = (date) => {
+        var sub_date = date.split('-');
+        return `${sub_date[2]}-${sub_date[1]}-${sub_date[0]}`;
+    }
 
+    console.log('posted data is', postedData);
     const authData = {
         "grant_type": "client_credentials",
         "client_id": "7b630d9c-e7c3-4e3e-81aa-0d563c52e59a",
@@ -15,123 +19,81 @@ router.post('/api', async (req, res) => {
         "resource": "api://7b630d9c-e7c3-4e3e-81aa-0d563c52e59a"
     };
 
-    var formBody = [];
-    for (var property in authData) {
-        var encodedKey = encodeURIComponent(property);
-        var encodedValue = encodeURIComponent(authData[property]);
-        formBody.push(encodedKey + "=" + encodedValue);
+    let formBody = [];
+    for (let property in authData) {
+        let encodedKey = encodeURIComponent(property);
+        let encodedValue = encodeURIComponent(authData[property]);
+        formBody.push(`${encodedKey}=${encodedValue}`);
     }
     formBody = formBody.join("&");
 
-    try {
-        const tokenResponse = await fetch('https://login.windows.net/6285e18b-e740-4114-8649-2d299e642afc/oauth2/token', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-            },
-            body: formBody
+    const getTotalQuantity = (data) => {
+        return data.line_items.reduce((total, item) => total + item.quantity, 0);
+    };
+
+    const totalQuantity = getTotalQuantity(postedData);
+    console.log("totalQuantity:", totalQuantity);
+
+    fetch('https://login.windows.net/6285e18b-e740-4114-8649-2d299e642afc/oauth2/token', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: formBody
+    })
+        .then(res => res.json())
+        .then(json => {
+            // Initialize arrays to hold dates and remarks
+            const culiWalkDates = [];
+            const culiWalkRemarks = [];
+
+            // Loop through each line item to collect dates and remarks
+            postedData.line_items.forEach(item => {
+                if (item.properties.length) {
+                    culiWalkDates.push(getDate(item.properties[0].value));
+                    culiWalkRemarks.push(item.properties[1].value);
+                }
+            });
+
+            console.log("culiWalkDates:", culiWalkDates);
+            console.log("culiWalkRemarks:", culiWalkRemarks);
+
+            const tourSaleData = {
+                "name": postedData.name,
+                "emailaddress": postedData.email,
+                "source": postedData.source_name,
+                "number": totalQuantity,
+                "walkingRouteShortName": postedData.line_items[0].sku, // Assuming SKU is same for all items
+                "idealDetails": "WWqHTVbf2V",
+                "date": postedData.created_at,
+                "amountPaid": postedData.current_subtotal_price,
+                "currency": postedData.currency,
+                "language": postedData.customer_locale,
+                "isAffiliate": false,
+                "culiWalkDates": culiWalkDates,
+                "culiWalkRemarks": culiWalkRemarks
+            };
+
+            return fetch('https://positivebytes-pg-routes-api-prd.azurewebsites.net/positivebytes/pocketguide/tours/sale', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${json.access_token}`,
+                    'X-TrackingId': postedData.id
+                },
+                body: JSON.stringify(tourSaleData)
+            });
+        })
+        .then(res => res.json())
+        .then(response => {
+            // handle response from your API
+            console.log('Tour Sale Response:', response);
+        })
+        .catch(err => {
+            console.error('Error:', err);
         });
-        const tokenData = await tokenResponse.json();
-        const accessToken = tokenData.access_token;
-        
-        // Function to calculate the total quantity of line items
-        function getTotalQuantity(data) {
-            return data.line_items.reduce((total, item) => total + item.quantity, 0);
-        }
 
-        const totalQuantity = getTotalQuantity(postedData);
-        console.log("test:", totalQuantity);
-
-        const tourSaleData = postedData.line_items.map(item => ({
-            "name": postedData.name,
-            "emailaddress": postedData.email,
-            "source": postedData.source_name,
-            "number": totalQuantity,
-            "walkingRouteShortName": item.sku,
-            "idealDetails": "WWqHTVbf2V",
-            "date": postedData.created_at,
-            "amountPaid": postedData.current_subtotal_price,
-            "currency": postedData.currency,
-            "language": postedData.customer_locale,
-            "isAffiliate": false,
-            "affiliateCode": "ABQEU",
-        }));
-
-        await fetch('https://positivebytes-pg-routes-api-prd.azurewebsites.net/positivebytes/pocketguide/tours/sale', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + accessToken,
-                'X-TrackingId': postedData.id
-            },
-            body: JSON.stringify(tourSaleData)
-        });
-
-        // const campaignData = postedData.line_items.map(item => ({
-        //     "tour": item.sku,
-        //     "emailaddress": postedData.email,
-        //     "camp": "kXatzmsi",
-        //     "source": postedData.source_name,
-        //     "code": "35519725aa4442929ec920c12b39afd9",
-        //     "serialnumber": "cGAHrGRC",
-        //     "language": postedData.customer_locale
-        // }));
-
-        // await fetch('https://positivebytes-pg-routes-api-prd.azurewebsites.net/positivebytes/pocketguide/tours/campaign', {
-        //     method: 'POST',
-        //     headers: {
-        //         'Content-Type': 'application/json',
-        //         'Authorization': 'Bearer ' + accessToken,
-        //         'X-TrackingId': postedData.id
-        //     },
-        //     body: JSON.stringify(campaignData)
-        // });
-
-        // const affiliateData = postedData.line_items.map(item => ({
-        //     "tour": item.sku,
-        //     "affcode": "ABQEU",
-        //     "source": postedData.source_name,
-        //     "code": "9103738e9e1d4b2c9aacd4c4d4960ebd",
-        //     "serialnumber": "iHGbINla"
-        // }));
-
-        // await fetch('https://positivebytes-pg-routes-api-prd.azurewebsites.net/positivebytes/pocketguide/tours/affiliate', {
-        //     method: 'POST',
-        //     headers: {
-        //         'Content-Type': 'application/json',
-        //         'Authorization': 'Bearer ' + accessToken,
-        //         'X-TrackingId': postedData.id
-        //     },
-        //     body: JSON.stringify(affiliateData)
-        // });
-
-        // await fetch('https://positivebytes-pg-routes-api-prd.azurewebsites.net/positivebytes/pocketguide/tours/count', {
-        //     method: 'GET',
-        //     headers: {
-        //         'Authorization': 'Bearer ' + accessToken,
-        //         'X-TrackingId': postedData.id
-        //     }
-        // });
-
-        // const transactionData = {
-        //     "transactionId": "c4c9841f-f8aa-4b38-a422-8ba880e9aee9"
-        // };
-
-        // await fetch('https://aois-tmg-dev.azurewebsites.net/api/OrdersCollector/transform', {
-        //     method: 'POST',
-        //     headers: {
-        //         'Content-Type': 'application/json',
-        //         'Accept': 'application/json',
-        //         'Authorization': 'Bearer ' + accessToken
-        //     },
-        //     body: JSON.stringify(transactionData)
-        // });
-
-        // res.status(200).send("Requests successfully completed");
-    } catch (error) {
-        console.error('Error:', error);
-        res.status(500).send("An error occurred while processing requests.");
-    }
+    res.status(200).send('Request received'); // Send a response back to Shopify webhook.
 });
 
 export default router;
