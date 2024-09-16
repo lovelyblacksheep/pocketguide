@@ -1,5 +1,8 @@
 import express from 'express';
 import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const router = express.Router();
 
@@ -7,14 +10,15 @@ router.post('/api', (req, res) => {
     const postedData = req.body;
 
     const getDate = (date) => {
-        return date.split('T')[0]; // Extract the YYYY-MM-DD part from the ISO 8601 date string
-    }
+        const [day, month, year] = date.split('-');
+        return `${year}-${month}-${day}`; // Convert from DD-MM-YYYY to YYYY-MM-DD
+    };
 
     console.log('posted data is', postedData);
     const authData = {
         "grant_type": "client_credentials",
-        "client_id": "7b630d9c-e7c3-4e3e-81aa-0d563c52e59a",
-        "client_secret": "H668Q~6J24neA_9nw~uc1WLzxbbbvDBuFG1xYcxR",
+        "client_id": process.env.CLIENT_ID,
+        "client_secret": process.env.CLIENT_SECRET,
         "resource": "api://7b630d9c-e7c3-4e3e-81aa-0d563c52e59a"
     };
 
@@ -69,8 +73,8 @@ router.post('/api', (req, res) => {
                 "currency": postedData.currency,
                 "language": postedData.customer_locale,
                 "isAffiliate": false,
-                "culiWalkDates": culiWalkDates,
-                "culiWalkRemarks": culiWalkRemarks
+                "culiWalkDate": culiWalkDates.length ? culiWalkDates[0] : null,
+                "culiWalkRemarks": culiWalkRemarks.length ? culiWalkRemarks[0] : null
             };
 
             return fetch('https://positivebytes-pg-routes-api-prd.azurewebsites.net/positivebytes/pocketguide/tours/sale', {
@@ -86,7 +90,7 @@ router.post('/api', (req, res) => {
         .then(res => res.json())
         .then(response => {
             // handle response from your API
-            console.log('Tour Sale Response:', response);
+            console.log('Tour Sale Response:', response, response.error);
         })
         .catch(err => {
             console.error('Error:', err);
